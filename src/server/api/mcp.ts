@@ -71,6 +71,7 @@ type McpServerDto = {
 
 type McpMutationBody = {
   cwd?: string
+  previousCwd?: string
   scope?: string
   sessionId?: string
   config?: unknown
@@ -481,7 +482,10 @@ async function createServer(body: Record<string, unknown>): Promise<Response> {
 }
 
 async function updateServer(name: string, body: Record<string, unknown>): Promise<Response> {
-  const existing = getMcpConfigByName(name)
+  const targetCwd = getCwd()
+  const previousCwd = optionalString(body.previousCwd)
+  const previousLookupCwd = previousCwd ?? targetCwd
+  const existing = runWithCwdOverride(previousLookupCwd, () => getMcpConfigByName(name))
   if (!existing) {
     throw ApiError.notFound(`MCP server not found: ${name}`)
   }
@@ -497,13 +501,13 @@ async function updateServer(name: string, body: Record<string, unknown>): Promis
   const previousScope = existing.scope
 
   try {
-    await removeMcpConfig(name, previousScope)
+    await runWithCwdOverride(previousLookupCwd, () => removeMcpConfig(name, previousScope))
     await addMcpConfig(name, nextConfig, nextScope)
   } catch (error) {
     try {
-      const restored = getMcpConfigByName(name)
+      const restored = runWithCwdOverride(previousLookupCwd, () => getMcpConfigByName(name))
       if (!restored) {
-        await addMcpConfig(name, previousConfig, previousScope)
+        await runWithCwdOverride(previousLookupCwd, () => addMcpConfig(name, previousConfig, previousScope))
       }
     } catch {
       // Preserve the original update error below.

@@ -3,12 +3,36 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import '@testing-library/jest-dom'
 
 import { McpSettings } from '../pages/McpSettings'
+import { sessionsApi } from '../api/sessions'
 import { useMcpStore } from '../stores/mcpStore'
 import { useSessionStore } from '../stores/sessionStore'
 import { useSettingsStore } from '../stores/settingsStore'
 
+vi.mock('../api/sessions', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../api/sessions')>()
+  return {
+    ...actual,
+    sessionsApi: {
+      ...actual.sessionsApi,
+      getRecentProjects: vi.fn(),
+    },
+  }
+})
+
 describe('McpSettings', () => {
   beforeEach(() => {
+    vi.mocked(sessionsApi.getRecentProjects).mockResolvedValue({
+      projects: [{
+        projectPath: '/workspace/selected-project',
+        realPath: '/workspace/selected-project',
+        projectName: 'selected-project',
+        repoName: 'org/selected-project',
+        branch: 'main',
+        isGit: true,
+        modifiedAt: '2026-05-25T00:00:00.000Z',
+        sessionCount: 1,
+      }],
+    })
     useSettingsStore.setState({ locale: 'en' })
     useSessionStore.setState({
       sessions: [
@@ -222,7 +246,7 @@ describe('McpSettings', () => {
     expect(toggleServer).toHaveBeenCalledWith(server, '/workspace/project', 'session-1')
   })
 
-  it('creates local MCP servers by default to match the CLI', async () => {
+  it('requires an explicitly selected project before creating local MCP servers', async () => {
     const createdServer = {
       name: 'context7',
       scope: 'local',
@@ -249,10 +273,23 @@ describe('McpSettings', () => {
       fireEvent.click(screen.getByRole('button', { name: /add server/i }))
     })
 
+    expect(screen.getByText('Select a project...')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+
     fireEvent.change(screen.getByLabelText(/Name/), { target: { value: 'context7' } })
     fireEvent.change(screen.getByLabelText(/Command to launch/), { target: { value: 'npx' } })
     fireEvent.change(screen.getByPlaceholderText('chrome-devtools-mcp@latest'), {
       target: { value: '@upstash/context7-mcp' },
+    })
+
+    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /Select a project/i }))
+    })
+
+    await act(async () => {
+      fireEvent.click(await screen.findByText('org/selected-project'))
     })
 
     await act(async () => {
@@ -270,7 +307,93 @@ describe('McpSettings', () => {
           env: {},
         },
       },
-      '/workspace/project',
+      '/workspace/selected-project',
+    )
+  })
+
+  it('updates project MCP servers using the explicitly selected target project', async () => {
+    vi.mocked(sessionsApi.getRecentProjects).mockResolvedValue({
+      projects: [{
+        projectPath: '/workspace/moved-project',
+        realPath: '/workspace/moved-project',
+        projectName: 'moved-project',
+        repoName: 'org/moved-project',
+        branch: 'main',
+        isGit: true,
+        modifiedAt: '2026-05-25T00:00:00.000Z',
+        sessionCount: 1,
+      }],
+    })
+    const updateServer = vi.fn().mockResolvedValue({
+      name: 'shared-tools',
+      scope: 'project',
+      transport: 'stdio',
+      enabled: true,
+      status: 'checking' as const,
+      statusLabel: 'Checking',
+      configLocation: '/workspace/moved-project/.mcp.json',
+      summary: 'npx shared-tools',
+      canEdit: true,
+      canRemove: true,
+      canReconnect: true,
+      canToggle: true,
+      projectPath: '/workspace/moved-project',
+      config: { type: 'stdio' as const, command: 'npx', args: ['shared-tools'], env: {} },
+    })
+    const server = {
+      name: 'shared-tools',
+      scope: 'project',
+      transport: 'stdio',
+      enabled: true,
+      status: 'connected',
+      statusLabel: 'Connected',
+      configLocation: '/workspace/project/.mcp.json',
+      summary: 'npx shared-tools',
+      canEdit: true,
+      canRemove: true,
+      canReconnect: true,
+      canToggle: true,
+      projectPath: '/workspace/project',
+      config: { type: 'stdio' as const, command: 'npx', args: ['shared-tools'], env: {} },
+    } as const
+
+    useMcpStore.setState({
+      servers: [server],
+      updateServer,
+    })
+
+    render(<McpSettings />)
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Open shared-tools' }))
+    })
+
+    expect(screen.getByText('project')).toBeInTheDocument()
+
+    await act(async () => {
+      fireEvent.click(screen.getByTitle('/workspace/project'))
+    })
+
+    await act(async () => {
+      fireEvent.click(await screen.findByText('org/moved-project'))
+    })
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    })
+
+    expect(updateServer).toHaveBeenCalledWith(
+      server,
+      {
+        scope: 'project',
+        config: {
+          type: 'stdio',
+          command: 'npx',
+          args: ['shared-tools'],
+          env: {},
+        },
+      },
+      '/workspace/moved-project',
     )
   })
 

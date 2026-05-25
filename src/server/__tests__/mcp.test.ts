@@ -197,6 +197,51 @@ describe('MCP API', () => {
     expect(connectSpy).not.toHaveBeenCalled()
   })
 
+  it('updates project MCP servers from their previous cwd into the selected target cwd', async () => {
+    const projectA = path.join(tmpDir, 'project-a')
+    const projectB = path.join(tmpDir, 'project-b')
+    await fs.mkdir(projectA, { recursive: true })
+    await fs.mkdir(projectB, { recursive: true })
+
+    const create = makeRequest('POST', '/api/mcp', {
+      cwd: projectA,
+      name: 'shared-tools',
+      scope: 'project',
+      config: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['old-tools'],
+        env: {},
+      },
+    })
+    const createRes = await handleMcpApi(create.req, create.url, create.segments)
+    expect(createRes.status).toBe(201)
+
+    const update = makeRequest('PUT', '/api/mcp/shared-tools', {
+      cwd: projectB,
+      previousCwd: projectA,
+      scope: 'project',
+      config: {
+        type: 'stdio',
+        command: 'npx',
+        args: ['new-tools'],
+        env: {},
+      },
+    })
+    const updateRes = await handleMcpApi(update.req, update.url, update.segments)
+    expect(updateRes.status).toBe(200)
+
+    const projectAConfig = JSON.parse(await fs.readFile(path.join(projectA, '.mcp.json'), 'utf8'))
+    const projectBConfig = JSON.parse(await fs.readFile(path.join(projectB, '.mcp.json'), 'utf8'))
+
+    expect(projectAConfig.mcpServers?.['shared-tools']).toBeUndefined()
+    expect(projectBConfig.mcpServers?.['shared-tools']).toMatchObject({
+      type: 'stdio',
+      command: 'npx',
+      args: ['new-tools'],
+    })
+  })
+
   it('checks a single server status on demand', async () => {
     const create = makeRequest('POST', '/api/mcp', {
       cwd: projectRoot,

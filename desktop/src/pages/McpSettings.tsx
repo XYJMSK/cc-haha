@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Button } from '../components/shared/Button'
+import { DirectoryPicker } from '../components/shared/DirectoryPicker'
 import { Input } from '../components/shared/Input'
 import { Modal } from '../components/shared/Modal'
 import { useTranslation } from '../i18n'
@@ -30,6 +31,7 @@ type KeyValueRow = {
 type McpDraft = {
   name: string
   scope: McpWritableScope
+  projectPath: string
   transport: TransportKind
   command: string
   args: StringRow[]
@@ -89,6 +91,7 @@ function createEmptyDraft(): McpDraft {
   return {
     name: '',
     scope: 'local',
+    projectPath: '',
     transport: 'stdio',
     command: '',
     args: [createStringRow('')],
@@ -105,6 +108,10 @@ function asWritableScope(scope: string): McpWritableScope {
   return scope === 'project' || scope === 'user' ? scope : 'local'
 }
 
+function scopeRequiresProject(scope: McpWritableScope) {
+  return scope === 'local' || scope === 'project'
+}
+
 function isStdioConfig(config: McpServerRecord['config']): config is Extract<McpServerRecord['config'], { type: 'stdio' }> {
   return config.type === 'stdio'
 }
@@ -117,6 +124,7 @@ function draftFromServer(server: McpServerRecord): McpDraft {
   const base = createEmptyDraft()
   base.name = server.name
   base.scope = asWritableScope(server.scope)
+  base.projectPath = scopeRequiresProject(base.scope) ? server.projectPath ?? '' : ''
 
   if (isStdioConfig(server.config)) {
     return {
@@ -199,6 +207,7 @@ function buildPayload(draft: McpDraft): McpUpsertPayload {
 
 function isDraftValid(draft: McpDraft) {
   if (!draft.name.trim()) return false
+  if (scopeRequiresProject(draft.scope) && !draft.projectPath.trim()) return false
   if (draft.transport === 'stdio') return draft.command.trim().length > 0
   return draft.url.trim().length > 0
 }
@@ -626,9 +635,10 @@ export function McpSettings() {
     setIsSaving(true)
     try {
       const payload = buildPayload(draft)
+      const operationCwd = scopeRequiresProject(draft.scope) ? draft.projectPath.trim() : undefined
       const saved = view.type === 'edit'
-        ? await updateServer(view.server, payload, resolveOperationCwd(view.server))
-        : await createServer(draft.name.trim(), payload, currentWorkDir)
+        ? await updateServer(view.server, payload, operationCwd)
+        : await createServer(draft.name.trim(), payload, operationCwd)
 
       addToast({
         type: 'success',
@@ -741,6 +751,21 @@ export function McpSettings() {
     const targetServer = editing ? view.server : null
     const transportLocked = editing
     const isBusy = isSaving || isDeleting
+    const targetProjectPath = draft.projectPath.trim()
+    const needsProjectTarget = scopeRequiresProject(draft.scope)
+    const targetProjectHint = draft.scope === 'local'
+      ? (targetProjectPath
+          ? t('settings.mcp.targetProject.localSelected', { path: targetProjectPath })
+          : currentWorkDir
+            ? t('settings.mcp.targetProject.emptyWithCurrent', { path: currentWorkDir })
+            : t('settings.mcp.targetProject.localEmpty'))
+      : draft.scope === 'project'
+        ? (targetProjectPath
+            ? t('settings.mcp.targetProject.projectSelected', { path: targetProjectPath })
+            : currentWorkDir
+              ? t('settings.mcp.targetProject.emptyWithCurrent', { path: currentWorkDir })
+              : t('settings.mcp.targetProject.projectEmpty'))
+        : t('settings.mcp.targetProject.globalHint')
 
     return (
       <>
@@ -831,11 +856,25 @@ export function McpSettings() {
                 )
               })}
             </div>
-            {currentWorkDir && (draft.scope === 'local' || draft.scope === 'project') && (
-              <p className="mt-3 break-all text-xs leading-5 text-[var(--color-text-tertiary)]">
-                {t('settings.mcp.currentProjectHint', { path: currentWorkDir })}
-              </p>
-            )}
+          </section>
+
+          <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] p-5">
+            <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <div className="text-sm font-semibold text-[var(--color-text-primary)]">
+                  {needsProjectTarget ? t('settings.mcp.targetProject.title') : t('settings.mcp.targetProject.globalTitle')}
+                </div>
+                <p className="mt-1 text-xs leading-5 text-[var(--color-text-tertiary)]">
+                  {targetProjectHint}
+                </p>
+              </div>
+              {needsProjectTarget && (
+                <DirectoryPicker
+                  value={draft.projectPath}
+                  onChange={(path) => setDraftField('projectPath', path)}
+                />
+              )}
+            </div>
           </section>
 
           <section className="rounded-[var(--radius-xl)] border border-[var(--color-border)] bg-[var(--color-surface)] overflow-hidden">

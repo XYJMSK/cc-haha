@@ -110,7 +110,8 @@ export const useMcpStore = create<McpStore>((set) => ({
   },
 
   updateServer: async (server, payload, cwd) => {
-    const response = await mcpApi.update(server.name, payload, cwd)
+    const previousCwd = isProjectScoped(server) ? server.projectPath : undefined
+    const response = await mcpApi.update(server.name, payload, cwd, previousCwd)
     const updated = attachProjectPath(response.server, cwd ?? server.projectPath)
     set((state) => ({
       servers: replaceServer(state.servers, server, updated, cwd ?? server.projectPath),

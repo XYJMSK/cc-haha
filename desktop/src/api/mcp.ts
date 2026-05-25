@@ -20,10 +20,11 @@ export const mcpApi = {
     })
   },
 
-  update: (name: string, payload: McpUpsertPayload, cwd?: string) => {
+  update: (name: string, payload: McpUpsertPayload, cwd?: string, previousCwd?: string) => {
     return api.put<{ server: McpServerRecord }>(`/api/mcp/${encodeURIComponent(name)}`, {
       ...payload,
       ...(cwd ? { cwd } : {}),
+      ...(previousCwd ? { previousCwd } : {}),
     })
   },
 
