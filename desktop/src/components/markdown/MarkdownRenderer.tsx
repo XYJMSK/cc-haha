@@ -68,6 +68,20 @@ function shouldRenderAsMermaid(block: CodeBlock): boolean {
   return looksLikeMermaid(block.code)
 }
 
+function MermaidStreamingPlaceholder() {
+  return (
+    <div
+      data-testid="mermaid-streaming-placeholder"
+      className="my-4 flex items-center justify-center rounded-[var(--radius-lg)] border border-[var(--color-border)]/50 bg-[var(--color-surface-container-low)] py-8"
+    >
+      <div className="flex items-center gap-2 text-[11px] text-[var(--color-text-tertiary)]">
+        <span className="material-symbols-outlined animate-spin text-[16px]">progress_activity</span>
+        Generating diagram...
+      </div>
+    </div>
+  )
+}
+
 const renderer = new marked.Renderer()
 
 let pendingCodeBlocks: CodeBlock[] = []
@@ -533,7 +547,11 @@ export const MarkdownRenderer = memo(function MarkdownRenderer({ content, varian
         part.type === 'html' ? (
           <div key={i} dangerouslySetInnerHTML={{ __html: part.content }} />
         ) : shouldRenderAsMermaid(part.block) ? (
-          <MermaidRenderer key={part.block.id} code={part.block.code} />
+          streaming ? (
+            <MermaidStreamingPlaceholder key={part.block.id} />
+          ) : (
+            <MermaidRenderer key={part.block.id} code={part.block.code} />
+          )
         ) : (
           <div key={part.block.id} className="my-4">
             <CodeViewer

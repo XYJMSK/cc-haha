@@ -95,6 +95,23 @@ describe('MarkdownRenderer', () => {
     expect(screen.queryByTestId('code-viewer')).not.toBeInTheDocument()
   })
 
+  it('keeps mermaid blocks in a generating state while assistant text is streaming', () => {
+    render(<MarkdownRenderer content={'```mermaid\ngraph TB\nA-->B'} streaming />)
+
+    expect(screen.getByTestId('mermaid-streaming-placeholder')).toHaveTextContent(
+      'Generating diagram...',
+    )
+    expect(screen.queryByTestId('mermaid-renderer')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('code-viewer')).not.toBeInTheDocument()
+  })
+
+  it('does not render completed mermaid blocks until streaming has finalized', () => {
+    render(<MarkdownRenderer content={'```mermaid\ngraph TB\nA-->B\n```'} streaming />)
+
+    expect(screen.getByTestId('mermaid-streaming-placeholder')).toBeInTheDocument()
+    expect(screen.queryByTestId('mermaid-renderer')).not.toBeInTheDocument()
+  })
+
   it('detects mermaid diagrams even when the fence has no language tag', () => {
     render(<MarkdownRenderer content={'```\ngraph TB\nA-->B\n```'} />)
 

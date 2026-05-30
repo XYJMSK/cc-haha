@@ -34,6 +34,7 @@ describe('MermaidRenderer', () => {
     expect(previewButton).toBeInTheDocument()
     expect(initializeMock).toHaveBeenCalledWith(expect.objectContaining({
       theme: 'base',
+      flowchart: expect.objectContaining({ htmlLabels: false }),
       themeVariables: expect.objectContaining({ darkMode: false }),
       suppressErrorRendering: true,
     }))
