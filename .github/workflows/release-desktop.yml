@@ -222,12 +222,15 @@ jobs:
           for attempt in $(seq 1 "$max_attempts"); do
             echo "Starting signed electron-builder attempt ${attempt}/${max_attempts} at $(date -u '+%Y-%m-%dT%H:%M:%SZ') with ${build_timeout_seconds}s watchdog"
             rm -rf build-artifacts/electron
-            if run_signed_electron_builder "$build_timeout_seconds" node ./node_modules/electron-builder/out/cli/cli.js ${{ matrix.builder_args }} --publish never; then
+            set +e
+            run_signed_electron_builder "$build_timeout_seconds" node ./node_modules/electron-builder/out/cli/cli.js ${{ matrix.builder_args }} --publish never
+            status=$?
+            set -e
+            if [ "$status" -eq 0 ]; then
               echo "Finished signed electron-builder attempt ${attempt}/${max_attempts} at $(date -u '+%Y-%m-%dT%H:%M:%SZ')"
               exit 0
             fi
 
-            status=$?
             if [ "$attempt" -eq "$max_attempts" ]; then
               echo "::error::Signed electron-builder failed after ${max_attempts} attempts"
               exit "$status"
